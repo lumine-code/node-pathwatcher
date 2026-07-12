@@ -2,7 +2,6 @@
 #include "include/efsw/efsw.hpp"
 #include "napi.h"
 #include <string>
-#include <uv.h>
 
 #ifdef DEBUG
 #include <iostream>
