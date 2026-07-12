@@ -42,6 +42,18 @@ describe('File', () => {
     expect(file.isDirectory()).toBe(false);
   });
 
+  it('supports deprecated emitter subscriptions without emissary', () => {
+    const callback = jasmine.createSpy('contents changed');
+    const subscription = file.on('contents-changed', callback);
+
+    expect(file.hasSubscriptions()).toBe(true);
+    file.emit('contents-changed');
+    expect(callback).toHaveBeenCalled();
+
+    subscription.dispose();
+    expect(file.hasSubscriptions()).toBe(false);
+  });
+
   describe('::isSymbolicLink', () => {
     it('returns false for regular files', () => {
       expect(file.isSymbolicLink()).toBe(false);

@@ -46,15 +46,6 @@ class File {
     this.path = filePath;
     this.emitter = new Emitter();
 
-    if (includeDeprecatedAPIs) {
-      this.on('contents-changed-subscription-will-be-added', this.willAddSubscription);
-      this.on('moved-subscription-will-be-added', this.willAddSubscription);
-      this.on('removed-subscription-will-be-added', this.willAddSubscription);
-      this.on('contents-changed-subscription-removed', this.didRemoveSubscription);
-      this.on('moved-subscription-removed', this.didRemoveSubscription);
-      this.on('removed-subscription-removed', this.didRemoveSubscription);
-    }
-
     this.cachedContents = null;
     this.reportOnDeprecations = true;
   }
@@ -538,9 +529,7 @@ class File {
 }
 
 if (Grim.includeDeprecatedAPIs) {
-  EmitterMixin = require('emissary').Emitter;
-  EmitterMixin.includeInto(File);
-  File.prototype.on = function(eventName) {
+  File.prototype.on = function(eventName, callback) {
     switch (eventName) {
       case 'contents-changed':
         Grim.deprecate("Use File::onDidChange instead");
@@ -556,13 +545,19 @@ if (Grim.includeDeprecatedAPIs) {
           Grim.deprecate("Subscribing via ::on is deprecated. Use documented event subscription methods instead.");
         }
     }
-    return EmitterMixin.prototype.on.apply(this, arguments);
+    const tracksNativeWatcher = ['contents-changed', 'moved', 'removed'].includes(eventName);
+    if (tracksNativeWatcher) this.willAddSubscription();
+    const subscription = this.emitter.on(eventName, callback);
+    return tracksNativeWatcher ? this.trackUnsubscription(subscription) : subscription;
   };
-} else {
-  File.prototype.hasSubscriptions = function() {
-    return this.subscriptionCount > 0;
+  File.prototype.emit = function(eventName, value) {
+    return this.emitter.emit(eventName, value);
   };
 }
+
+File.prototype.hasSubscriptions = function() {
+  return this.subscriptionCount > 0;
+};
 
 
 module.exports = File;

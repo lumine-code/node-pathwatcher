@@ -30,11 +30,6 @@ class Directory {
     this.emitter = new Emitter();
     this.symlink = symlink;
 
-    if (includeDeprecatedAPIs) {
-      this.on('contents-changed-subscription-will-be-added', this.willAddSubscription.bind(this));
-      this.on('contents-changed-subscription-removed', this.didRemoveSubscription.bind(this));
-    }
-
     if (directoryPath) {
       directoryPath = Path.normalize(directoryPath);
       if (directoryPath.length > 1 && directoryPath.endsWith(Path.sep)) {
@@ -443,18 +438,20 @@ class Directory {
   }
 }
 
-let EmitterMixin;
 if (Grim.includeDeprecatedAPIs) {
-  EmitterMixin = require('emissary').Emitter;
-  EmitterMixin.includeInto(Directory);
-
-  Directory.prototype.on = function on(eventName, ...args) {
+  Directory.prototype.on = function on(eventName, callback) {
     if (eventName === 'contents-changed') {
       Grim.deprecate("Use Directory::onDidChange instead");
     } else if (this.reportOnDeprecations) {
       Grim.deprecate("Subscribing via ::on is deprecated. Use documented event subscription methods instead.");
     }
-    EmitterMixin.prototype.on.call(this, eventName, ...args);
+    const tracksNativeWatcher = eventName === 'contents-changed';
+    if (tracksNativeWatcher) this.willAddSubscription();
+    const subscription = this.emitter.on(eventName, callback);
+    return tracksNativeWatcher ? this.trackUnsubscription(subscription) : subscription;
+  };
+  Directory.prototype.emit = function emit(eventName, value) {
+    return this.emitter.emit(eventName, value);
   };
 }
 
