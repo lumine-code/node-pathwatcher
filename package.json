@@ -20,17 +20,16 @@
     "clean": "node scripts/clean.js"
   },
   "devDependencies": {
-    "jasmine": "^5.3.1",
-    "rimraf": "~2.2.0",
+    "jasmine": "^6.3.0",
     "temp": "~0.9.0"
   },
   "dependencies": {
-    "async": "~0.2.10",
+    "async": "^3.2.6",
     "event-kit": "^2.1.0",
     "fs-plus": "https://github.com/lumine-code/fs-plus.git#c00d99a85642969635218ed8862a37f7a0bce6e2",
     "grim": "^2.0.1",
-    "iconv-lite": "~0.4.4",
-    "node-addon-api": "^8.1.0",
+    "iconv-lite": "^0.7.3",
+    "node-addon-api": "^8.9.0",
     "underscore-plus": "https://github.com/lumine-code/underscore-plus.git#02b4e5a0f0f85fdf2ef5550db7131db0bda4937a"
   }
 }
