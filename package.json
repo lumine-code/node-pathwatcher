@@ -1,24 +1,18 @@
 {
-  "main": "./src/main",
   "name": "@lumine-code/pathwatcher",
-  "description": "Watch files and directories for changes",
+  "author": "lumine-code",
+  "description": "Watches files and directories and provides Lumine-compatible file system abstractions.",
   "version": "10.0.0",
-  "licenses": [
-    {
-      "type": "MIT",
-      "url": "https://github.com/lumine-code/node-pathwatcher/raw/master/LICENSE.md"
-    }
-  ],
+  "main": "./src/main",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/lumine-code/node-pathwatcher.git"
-  },
-  "bugs": {
-    "url": "https://github.com/lumine-code/node-pathwatcher/issues"
-  },
+  "repository": "https://github.com/lumine-code/node-pathwatcher",
+  "bugs": "https://github.com/lumine-code/node-pathwatcher/issues",
   "homepage": "https://github.com/lumine-code/node-pathwatcher/",
   "scripts": {
     "test": "node spec/run.js",

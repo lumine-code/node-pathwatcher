@@ -1,7 +1,12 @@
 # @lumine-code/pathwatcher
 
-Watch files and directories for changes.
+Watches files and directories and provides Lumine-compatible file system abstractions.
 
+## Features
+
+- **Cross-platform watching**: observes file and directory changes on Windows, macOS, and Linux.
+- **Context safety**: supports multiple Node.js worker and Electron renderer contexts.
+- **File abstractions**: provides Lumine-compatible `File` and `Directory` classes.
 
 > [!IMPORTANT]
 > This library is used in Lumine in several places for compatibility reasons. The [nsfw](https://www.npmjs.com/package/nsfw) library is more robust and more widely used; it is available in Lumine via `atom.watchPath` and is usually a better choice.
@@ -10,7 +15,7 @@ Watch files and directories for changes.
 >
 > The purpose of this library's continued inclusion in Lumine is to provide the [File][] and [Directory][] classes that have long been available as exports via `require('atom')`.
 
-## Installing
+## Installation
 
 ```bash
 npm install @lumine-code/pathwatcher
@@ -78,3 +83,7 @@ The public `File` and `Directory` APIs remain compatible with Lumine's `require(
 
 [File]: https://github.com/lumine-code/node-pathwatcher/blob/master/src/file.js
 [Directory]: https://github.com/lumine-code/node-pathwatcher/blob/master/src/directory.js
+
+## Contributing
+
+Got ideas to make this package better, found a bug, or want to help add new features? Just drop your thoughts on GitHub. Any feedback is welcome!
