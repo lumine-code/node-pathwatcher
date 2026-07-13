@@ -471,7 +471,7 @@ class File {
       case 'delete':
         this.unsubscribeFromNativeChangeEvents();
         // We could just `await wait(50)` here, but this method exists so that
-        // we can monkeypatch it in the Pulsar specs and prevent it from going
+        // we can monkeypatch it in the Lumine specs and prevent it from going
         // async.
         this.detectResurrectionAfterDelay();
         return;

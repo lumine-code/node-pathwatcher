@@ -1,12 +1,12 @@
 {
   "main": "./src/main",
-  "name": "@pulsar-edit/pathwatcher",
+  "name": "@lumine-code/pathwatcher",
   "description": "Watch files and directories for changes",
-  "version": "9.0.4",
+  "version": "10.0.0",
   "licenses": [
     {
       "type": "MIT",
-      "url": "http://github.com/pulsar-edit/node-pathwatcher/raw/master/LICENSE.md"
+      "url": "https://github.com/lumine-code/node-pathwatcher/raw/master/LICENSE.md"
     }
   ],
   "engines": {
@@ -14,12 +14,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/pulsar-edit/node-pathwatcher.git"
+    "url": "https://github.com/lumine-code/node-pathwatcher.git"
   },
   "bugs": {
-    "url": "https://github.com/pulsar-edit/node-pathwatcher/issues"
+    "url": "https://github.com/lumine-code/node-pathwatcher/issues"
   },
-  "homepage": "https://github.com/pulsar-edit/node-pathwatcher/",
+  "homepage": "https://github.com/lumine-code/node-pathwatcher/",
   "scripts": {
     "test": "node spec/run.js",
     "test-context-safety": "node spec/context-safety.js",

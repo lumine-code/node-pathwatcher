@@ -1,19 +1,19 @@
-# node-pathwatcher
+# @lumine-code/pathwatcher
 
 Watch files and directories for changes.
 
 
 > [!IMPORTANT]
-> This library is used in [Pulsar][] in several places for compatibility reasons. The [nsfw](https://www.npmjs.com/package/nsfw) library is more robust and more widely used; it is available in Pulsar via `atom.watchPath` and is usually a better choice.
+> This library is used in Lumine in several places for compatibility reasons. The [nsfw](https://www.npmjs.com/package/nsfw) library is more robust and more widely used; it is available in Lumine via `atom.watchPath` and is usually a better choice.
 >
 > If you’re here because you want a general-purpose file-watching library for Node, use `nsfw` instead.
 >
-> The purpose of this library’s continued inclusion in Pulsar is to provide the [File][] and [Directory][] classes that have long been available as exports via `require('atom')`.
+> The purpose of this library's continued inclusion in Lumine is to provide the [File][] and [Directory][] classes that have long been available as exports via `require('atom')`.
 
 ## Installing
 
 ```bash
-npm install pathwatcher
+npm install @lumine-code/pathwatcher
 ```
 
 ## Building
@@ -32,7 +32,7 @@ If you’re using it in an Electron renderer process, you must take extra care i
 ## Using
 
 ```js
-const PathWatcher = require('pathwatcher');
+const PathWatcher = require('@lumine-code/pathwatcher');
 ```
 
 ### `watch(filename, listener)`
@@ -70,12 +70,11 @@ Returns an array of strings representing the actual paths that are being watched
 
 These are convenience wrappers around some filesystem operations. They also wrap `PathWatcher.watch` via their `onDidChange` (and similar) methods.
 
-Documentation can be found on the Pulsar documentation site:
+The public `File` and `Directory` APIs remain compatible with Lumine's `require('atom')` exports.
 
 * [File][]
 * [Directory][]
 
 
-[File]: https://docs.pulsar-edit.dev/api/pulsar/latest/File/
-[Directory]: https://docs.pulsar-edit.dev/api/pulsar/latest/Directory/
-[Pulsar]: https://pulsar-edit.dev
+[File]: https://github.com/lumine-code/node-pathwatcher/blob/master/src/file.js
+[Directory]: https://github.com/lumine-code/node-pathwatcher/blob/master/src/directory.js
