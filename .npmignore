@@ -6,3 +6,5 @@ scripts/
 .tool-versions
 npm-debug.log
 compile_commands.json
+/.github/
+**/.github/
