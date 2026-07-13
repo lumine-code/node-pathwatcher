@@ -1,50 +1,30 @@
-name: Publish to NPM
+name: NPM Publish
+
 on:
   release:
-    types: [created]
+    types: [published]
   workflow_dispatch:
 
-env:
-  NODE_VERSION: 16
-  NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+permissions:
+  contents: read
 
 jobs:
-  Test:
-    name: "Test"
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-        node_version:
-          - 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
+  test:
+    uses: ./.github/workflows/ci.yml
 
-      - name: Install Node ${{ matrix.node }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node_version }}
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run tests
-        run: npm test
-
-  Publish:
-    needs: Test
+  publish:
+    needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: 24
           registry-url: https://registry.npmjs.org/
       - run: npm ci
-      - run: npm publish --access public
+      - run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
