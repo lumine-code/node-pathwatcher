@@ -1,8 +1,8 @@
 const crypto = require('crypto');
 const Path = require('path');
 const { Emitter, Disposable } = require('event-kit');
-const _ = require('underscore-plus');
-const FS = require('fs-plus');
+const _ = require('@lumine-code/underscore-plus');
+const FS = require('@lumine-code/fs-plus');
 const Grim = require('grim');
 
 let iconv;

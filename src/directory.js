@@ -1,5 +1,5 @@
 const Path = require('path');
-const FS = require('fs-plus');
+const FS = require('@lumine-code/fs-plus');
 const Grim = require('grim');
 const async = require('async');
 const { Emitter, Disposable } = require('event-kit');

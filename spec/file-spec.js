@@ -1,5 +1,5 @@
 const path = require('path');
-const fs = require('fs-plus');
+const fs = require('@lumine-code/fs-plus');
 const temp = require('temp');
 const File = require('../src/file');
 const PathWatcher = require('../src/main');
