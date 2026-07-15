@@ -228,6 +228,23 @@ void DestroyWatch( WatcherStructWin32* pWatch ) {
 		WatcherWin32* tWatch = pWatch->Watch;
 		tWatch->StopNow = true;
 		CancelIoEx( pWatch->Watch->DirHandle, &pWatch->Overlapped );
+		// `CancelIoEx` is asynchronous: the cancelled `ReadDirectoryChangesW`
+		// is still in flight until the kernel completes it, and the kernel
+		// writes into `Watch->Buffer` (whose pages are pinned for the I/O)
+		// when it does — including on cancellation. Freeing the buffer before
+		// that final write lands lets the kernel scribble over recycled heap
+		// memory, corrupting unrelated allocations. Wait for the operation to
+		// finish before freeing anything. We cannot use `GetOverlappedResult`
+		// with `bWait` here: the handle is bound to an I/O completion port, so
+		// the completion is delivered to the port (not by signalling the
+		// handle) and the watcher thread that drains it has already stopped by
+		// teardown — waiting on the handle would deadlock. Instead poll the
+		// kernel-updated status field via `HasOverlappedIoCompleted`, which the
+		// kernel sets independently of how the completion is delivered. Bounded
+		// so a stuck operation can never hang teardown.
+		for ( int i = 0; i < 500 && !HasOverlappedIoCompleted( &pWatch->Overlapped ); ++i ) {
+			Sleep( 1 );
+		}
 		CloseHandle( pWatch->Watch->DirHandle );
 		efSAFE_DELETE_ARRAY( pWatch->Watch->DirName );
 		efSAFE_DELETE( pWatch->Watch );
