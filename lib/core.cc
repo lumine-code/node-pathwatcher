@@ -224,7 +224,7 @@ void PathWatcherListener::handleFileAction(efsw::WatchID watchId,
                                            const std::string &dir,
                                            const std::string &filename,
                                            efsw::Action action,
-                                           std::string oldFilename) {
+                                           const std::string &oldFilename) {
 #ifdef DEBUG
   std::cout << "PathWatcherListener::handleFileAction dir: " << dir
             << " filename: " << filename << " oldFilename: " << filename

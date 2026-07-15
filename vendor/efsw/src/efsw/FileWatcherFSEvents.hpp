@@ -7,37 +7,14 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreServices/CoreServices.h>
+#include <condition_variable>
 #include <dispatch/dispatch.h>
 #include <efsw/WatcherFSEvents.hpp>
-#include <map>
-#include <vector>
-#include <condition_variable>
 #include <mutex>
+#include <unordered_map>
+#include <vector>
 
 namespace efsw {
-
-/* OSX < 10.7 has no file events */
-/* So i declare the events constants */
-enum FSEventEvents {
-	efswFSEventStreamCreateFlagUseCFTypes = 0x00000001,
-	efswFSEventStreamCreateFlagNoDefer = 0x00000002,
-	efswFSEventStreamCreateFlagFileEvents = 0x00000010,
-	efswFSEventStreamCreateFlagUseExtendedData = 0x00000040,
-	efswFSEventStreamEventFlagItemCreated = 0x00000100,
-	efswFSEventStreamEventFlagItemRemoved = 0x00000200,
-	efswFSEventStreamEventFlagItemInodeMetaMod = 0x00000400,
-	efswFSEventStreamEventFlagItemRenamed = 0x00000800,
-	efswFSEventStreamEventFlagItemModified = 0x00001000,
-	efswFSEventStreamEventFlagItemFinderInfoMod = 0x00002000,
-	efswFSEventStreamEventFlagItemChangeOwner = 0x00004000,
-	efswFSEventStreamEventFlagItemXattrMod = 0x00008000,
-	efswFSEventStreamEventFlagItemIsFile = 0x00010000,
-	efswFSEventStreamEventFlagItemIsDir = 0x00020000,
-	efswFSEventStreamEventFlagItemIsSymlink = 0x00040000,
-	efswFSEventsModified = efswFSEventStreamEventFlagItemFinderInfoMod |
-						   efswFSEventStreamEventFlagItemModified |
-						   efswFSEventStreamEventFlagItemInodeMetaMod
-};
 
 /// Implementation for Win32 based on ReadDirectoryChangesW.
 /// @class FileWatcherFSEvents
@@ -49,7 +26,7 @@ class FileWatcherFSEvents : public FileWatcherImpl {
 	static bool isGranular();
 
 	/// type for a map from WatchID to WatcherWin32 pointer
-	typedef std::map<WatchID, WatcherFSEvents*> WatchMap;
+	typedef std::unordered_map<WatchID, WatcherFSEvents*> WatchMap;
 
 	FileWatcherFSEvents( FileWatcher* parent );
 
@@ -58,7 +35,7 @@ class FileWatcherFSEvents : public FileWatcherImpl {
 	/// Add a directory watch
 	/// On error returns WatchID with Error type.
 	WatchID addWatch( const std::string& directory, FileWatchListener* watcher, bool recursive,
-	                  const std::vector<WatcherOption> &options ) override;
+					  const std::vector<WatcherOption>& options ) override;
 
 	/// Remove a directory watch. This is a brute force lazy search O(nlogn).
 	void removeWatch( const std::string& directory ) override;
@@ -71,7 +48,7 @@ class FileWatcherFSEvents : public FileWatcherImpl {
 
 	/// Handles the action
 	void handleAction( Watcher* watch, const std::string& filename, unsigned long action,
-					   std::string oldFilename = "" ) override;
+					   const std::string& oldFilename = "" ) override;
 
 	/// @return Returns a list of the directories that are being watched
 	std::vector<std::string> directories() override;
@@ -93,7 +70,6 @@ class FileWatcherFSEvents : public FileWatcherImpl {
 
 	std::mutex mWatchesMutex;
 	std::condition_variable mWatchCond;
-
 };
 
 } // namespace efsw

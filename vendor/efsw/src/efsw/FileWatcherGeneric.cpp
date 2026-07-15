@@ -6,7 +6,13 @@
 namespace efsw {
 
 FileWatcherGeneric::FileWatcherGeneric( FileWatcher* parent ) :
-	FileWatcherImpl( parent ), mThread( NULL ), mLastWatchID( 0 ) {
+	FileWatcherGeneric( parent, 1000 ) {
+	mInitOK = true;
+	mIsGeneric = true;
+}
+
+FileWatcherGeneric::FileWatcherGeneric( FileWatcher* parent, unsigned int pollingFreq ) :
+	FileWatcherImpl( parent ), mThread( NULL ), mLastWatchID( 0 ), mPollingFreq( pollingFreq ) {
 	mInitOK = true;
 	mIsGeneric = true;
 }
@@ -25,7 +31,7 @@ FileWatcherGeneric::~FileWatcherGeneric() {
 }
 
 WatchID FileWatcherGeneric::addWatch( const std::string& directory, FileWatchListener* watcher,
-									  bool recursive, const std::vector<WatcherOption>& options ) {
+									  bool recursive, const std::vector<WatcherOption>& ) {
 	std::string dir( directory );
 
 	FileSystem::dirAddSlashAtEnd( dir );
@@ -64,10 +70,13 @@ WatchID FileWatcherGeneric::addWatch( const std::string& directory, FileWatchLis
 }
 
 void FileWatcherGeneric::removeWatch( const std::string& directory ) {
+	std::string dir( directory );
+	FileSystem::dirAddSlashAtEnd( dir );
+
 	WatchList::iterator it = mWatches.begin();
 
 	for ( ; it != mWatches.end(); ++it ) {
-		if ( ( *it )->Directory == directory ) {
+		if ( ( *it )->Directory == dir ) {
 			WatcherGeneric* watch = ( *it );
 
 			Lock lock( mWatchesLock );
@@ -101,7 +110,7 @@ void FileWatcherGeneric::removeWatch( WatchID watchid ) {
 
 void FileWatcherGeneric::watch() {
 	if ( NULL == mThread ) {
-		mThread = new Thread( &FileWatcherGeneric::run, this );
+		mThread = new Thread( [this] { run(); } );
 		mThread->launch();
 	}
 }
@@ -119,11 +128,12 @@ void FileWatcherGeneric::run() {
 		}
 
 		if ( mInitOK )
-			System::sleep( 1000 );
+			System::sleep( mPollingFreq );
 	} while ( mInitOK );
 }
 
-void FileWatcherGeneric::handleAction( Watcher*, const std::string&, unsigned long, std::string ) {
+void FileWatcherGeneric::handleAction( Watcher*, const std::string&, unsigned long,
+									   const std::string& ) {
 	/// Not used
 }
 

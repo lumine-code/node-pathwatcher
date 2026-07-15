@@ -8,20 +8,21 @@
 namespace efsw {
 
 WatcherFSEvents::WatcherFSEvents() :
-	Watcher(), FWatcher( NULL ), FSStream( NULL ), WatcherGen( NULL ) {}
-
-WatcherFSEvents::WatcherFSEvents( WatchID id, std::string directory, FileWatchListener* listener,
-								  bool recursive, WatcherFSEvents* parent ) :
-	Watcher( id, directory, listener, recursive ),
-	FWatcher( NULL ),
-	FSStream( NULL ),
-	WatcherGen( NULL ) {}
+	Watcher(), FWatcher( NULL ), FSStream( NULL ), DispatchQueue( NULL ), WatcherGen( NULL ) {}
 
 WatcherFSEvents::~WatcherFSEvents() {
 	if ( NULL != FSStream ) {
 		FSEventStreamStop( FSStream );
 		FSEventStreamInvalidate( FSStream );
+		if ( NULL != DispatchQueue ) {
+			dispatch_sync( DispatchQueue, ^{} );
+		}
 		FSEventStreamRelease( FSStream );
+	}
+
+	if ( NULL != DispatchQueue ) {
+		dispatch_release( DispatchQueue );
+		DispatchQueue = NULL;
 	}
 
 	efSAFE_DELETE( WatcherGen );
@@ -50,13 +51,13 @@ void WatcherFSEvents::init() {
 	ctx.release = NULL;
 	ctx.copyDescription = NULL;
 
-	dispatch_queue_t queue = dispatch_queue_create(NULL, NULL);
+	DispatchQueue = dispatch_queue_create( NULL, NULL );
 
 	FSStream =
 		FSEventStreamCreate( kCFAllocatorDefault, &FileWatcherFSEvents::FSEventCallback, &ctx,
 							 CFDirectoryArray, kFSEventStreamEventIdSinceNow, 0., streamFlags );
 
-	FSEventStreamSetDispatchQueue(FSStream, queue);
+	FSEventStreamSetDispatchQueue( FSStream, DispatchQueue );
 
 	FSEventStreamStart( FSStream );
 
@@ -66,29 +67,37 @@ void WatcherFSEvents::init() {
 
 void WatcherFSEvents::sendFileAction( WatchID watchid, const std::string& dir,
 									  const std::string& filename, Action action,
-									  std::string oldFilename ) {
+									  const std::string& oldFilename ) {
 	Listener->handleFileAction( watchid, FileSystem::precomposeFileName( dir ),
-								FileSystem::precomposeFileName( filename ), action, FileSystem::precomposeFileName( oldFilename ) );
+								FileSystem::precomposeFileName( filename ), action,
+								FileSystem::precomposeFileName( oldFilename ) );
+}
+
+void WatcherFSEvents::sendMissedFileActions( WatchID watchid, const std::string& dir ) {
+	Listener->handleMissedFileActions( watchid, FileSystem::precomposeFileName( dir ) );
 }
 
 void WatcherFSEvents::handleAddModDel( const Uint32& flags, const std::string& path,
-									   std::string& dirPath, std::string& filePath ) {
-	if ( flags & efswFSEventStreamEventFlagItemCreated ) {
-		if ( FileInfo::exists( path ) ) {
-			sendFileAction( ID, dirPath, filePath, Actions::Add );
-		}
+									   std::string& dirPath, std::string& filePath, Uint64 inode ) {
+	if ( ( flags & efswFSEventStreamEventFlagItemCreated ) && FileInfo::exists( path ) &&
+		 ( !SanitizeEvents || FilesAdded.find( inode ) != FilesAdded.end() ) ) {
+		sendFileAction( ID, dirPath, filePath, Actions::Add );
+
+		if ( SanitizeEvents )
+			FilesAdded.insert( inode );
 	}
 
-	if ( flags & efswFSEventsModified ) {
+	if ( flags & ModifiedFlags ) {
 		sendFileAction( ID, dirPath, filePath, Actions::Modified );
 	}
 
-	if ( flags & efswFSEventStreamEventFlagItemRemoved ) {
+	if ( ( flags & efswFSEventStreamEventFlagItemRemoved ) && !FileInfo::exists( path ) ) {
 		// Since i don't know the order, at least i try to keep the data consistent with the real
 		// state
-		if ( !FileInfo::exists( path ) ) {
-			sendFileAction( ID, dirPath, filePath, Actions::Delete );
-		}
+		sendFileAction( ID, dirPath, filePath, Actions::Delete );
+
+		if ( SanitizeEvents )
+			FilesAdded.erase( inode );
 	}
 }
 
@@ -100,9 +109,25 @@ void WatcherFSEvents::handleActions( std::vector<FSEvent>& events ) {
 
 		if ( event.Flags &
 			 ( kFSEventStreamEventFlagUserDropped | kFSEventStreamEventFlagKernelDropped |
-			   kFSEventStreamEventFlagEventIdsWrapped | kFSEventStreamEventFlagHistoryDone |
+			   kFSEventStreamEventFlagMustScanSubDirs ) ) {
+			efDEBUG( "Rescan/Drop event for watch: %s - flags: 0x%x\n", Directory.c_str(),
+					 event.Flags );
+			std::string dirPath = Directory;
+			FileSystem::dirRemoveSlashAtEnd( dirPath );
+			sendMissedFileActions( ID, dirPath );
+			continue;
+		}
+
+		if ( event.Flags &
+			 ( kFSEventStreamEventFlagEventIdsWrapped | kFSEventStreamEventFlagHistoryDone |
 			   kFSEventStreamEventFlagMount | kFSEventStreamEventFlagUnmount |
 			   kFSEventStreamEventFlagRootChanged ) ) {
+			continue;
+		}
+
+		// Ignore events for the watched directory itself or outside of it
+		if ( event.Path.length() < Directory.length() || event.Path.find( Directory ) != 0 ||
+			 event.Path == Directory ) {
 			continue;
 		}
 
@@ -154,12 +179,13 @@ void WatcherFSEvents::handleActions( std::vector<FSEvent>& events ) {
 							sendFileAction( ID, dirPath, filePath, Actions::Delete );
 							sendFileAction( ID, newDir, newFilepath, Actions::Add );
 
-							if ( nEvent.Flags & efswFSEventsModified ) {
+							if ( nEvent.Flags & ModifiedFlags ) {
 								sendFileAction( ID, newDir, newFilepath, Actions::Modified );
 							}
 						}
 					} else {
-						handleAddModDel( nEvent.Flags, nEvent.Path, dirPath, filePath );
+						handleAddModDel( nEvent.Flags, nEvent.Path, dirPath, filePath,
+										 event.inode );
 					}
 
 					if ( nEvent.Flags & ( efswFSEventStreamEventFlagItemCreated |
@@ -175,14 +201,14 @@ void WatcherFSEvents::handleActions( std::vector<FSEvent>& events ) {
 				} else if ( FileInfo::exists( event.Path ) ) {
 					sendFileAction( ID, dirPath, filePath, Actions::Add );
 
-					if ( event.Flags & efswFSEventsModified ) {
+					if ( event.Flags & ModifiedFlags ) {
 						sendFileAction( ID, dirPath, filePath, Actions::Modified );
 					}
 				} else {
 					sendFileAction( ID, dirPath, filePath, Actions::Delete );
 				}
 			} else {
-				handleAddModDel( event.Flags, event.Path, dirPath, filePath );
+				handleAddModDel( event.Flags, event.Path, dirPath, filePath, event.inode );
 			}
 		} else {
 			efDEBUG( "Directory: %s changed\n", event.Path.c_str() );
@@ -192,7 +218,7 @@ void WatcherFSEvents::handleActions( std::vector<FSEvent>& events ) {
 }
 
 void WatcherFSEvents::process() {
-	std::set<std::string>::iterator it = DirsChanged.begin();
+	std::unordered_set<std::string>::iterator it = DirsChanged.begin();
 
 	for ( ; it != DirsChanged.end(); it++ ) {
 		if ( !FileWatcherFSEvents::isGranular() ) {

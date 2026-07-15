@@ -19,12 +19,13 @@
 
 namespace efsw {
 
-FileWatcherKqueue::FileWatcherKqueue( FileWatcher* parent ) :
+FileWatcherKqueue::FileWatcherKqueue( FileWatcher* parent, unsigned int pollingFreq ) :
 	FileWatcherImpl( parent ),
 	mLastWatchID( 0 ),
 	mThread( NULL ),
 	mFileDescriptorCount( 1 ),
-	mAddingWatcher( false ) {
+	mAddingWatcher( false ),
+	mPollingFreq( pollingFreq ) {
 	mTimeOut.tv_sec = 0;
 	mTimeOut.tv_nsec = 0;
 	mInitOK = true;
@@ -129,12 +130,15 @@ WatchID FileWatcherKqueue::addWatch( const std::string& directory, FileWatchList
 }
 
 void FileWatcherKqueue::removeWatch( const std::string& directory ) {
+	std::string dir( directory );
+	FileSystem::dirAddSlashAtEnd( dir );
+
 	Lock lock( mWatchesLock );
 
 	WatchMap::iterator iter = mWatches.begin();
 
 	for ( ; iter != mWatches.end(); ++iter ) {
-		if ( directory == iter->second->Directory ) {
+		if ( dir == iter->second->Directory ) {
 			removeWatch( iter->first );
 			return;
 		}
@@ -162,7 +166,7 @@ bool FileWatcherKqueue::isAddingWatcher() const {
 
 void FileWatcherKqueue::watch() {
 	if ( NULL == mThread ) {
-		mThread = new Thread( &FileWatcherKqueue::run, this );
+		mThread = new Thread( [this] { run(); } );
 		mThread->launch();
 	}
 }
@@ -177,12 +181,12 @@ void FileWatcherKqueue::run() {
 			}
 		}
 
-		System::sleep( 500 );
+		System::sleep( mPollingFreq );
 	} while ( mInitOK );
 }
 
 void FileWatcherKqueue::handleAction( Watcher* watch, const std::string& filename,
-									  unsigned long action, std::string oldFilename ) {}
+									  unsigned long action, const std::string& oldFilename ) {}
 
 std::vector<std::string> FileWatcherKqueue::directories() {
 	std::vector<std::string> dirs;

@@ -31,7 +31,7 @@ class DirWatcherGeneric {
 
 	bool pathInWatches( std::string path );
 
-	void addChilds( bool reportNewFiles = true );
+	void addChildren( bool reportNewFiles = true );
 
 	DirWatcherGeneric* findDirWatcher( std::string dir );
 
@@ -49,7 +49,7 @@ class DirWatcherGeneric {
 	void resetDirectory( std::string directory );
 
 	void handleAction( const std::string& filename, unsigned long action,
-					   std::string oldFilename = "" );
+					   const std::string& oldFilename = "" );
 };
 
 } // namespace efsw

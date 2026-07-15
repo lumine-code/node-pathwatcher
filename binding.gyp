@@ -19,10 +19,8 @@
         "./vendor/efsw/src/efsw/FileWatcherKqueue.cpp",
         "./vendor/efsw/src/efsw/FileWatcherWin32.cpp",
         "./vendor/efsw/src/efsw/Log.cpp",
-        "./vendor/efsw/src/efsw/Mutex.cpp",
         "./vendor/efsw/src/efsw/String.cpp",
         "./vendor/efsw/src/efsw/System.cpp",
-        "./vendor/efsw/src/efsw/Thread.cpp",
         "./vendor/efsw/src/efsw/Watcher.cpp",
         "./vendor/efsw/src/efsw/WatcherFSEvents.cpp",
         "./vendor/efsw/src/efsw/WatcherGeneric.cpp",
@@ -46,17 +44,13 @@
           ],
           "sources": [
             "./vendor/efsw/src/efsw/platform/win/FileSystemImpl.cpp",
-            "./vendor/efsw/src/efsw/platform/win/MutexImpl.cpp",
-            "./vendor/efsw/src/efsw/platform/win/SystemImpl.cpp",
-            "./vendor/efsw/src/efsw/platform/win/ThreadImpl.cpp"
+            "./vendor/efsw/src/efsw/platform/win/SystemImpl.cpp"
           ],
         }],
         ["OS!=\"win\"", {
           "sources": [
             "./vendor/efsw/src/efsw/platform/posix/FileSystemImpl.cpp",
-            "./vendor/efsw/src/efsw/platform/posix/MutexImpl.cpp",
-            "./vendor/efsw/src/efsw/platform/posix/SystemImpl.cpp",
-            "./vendor/efsw/src/efsw/platform/posix/ThreadImpl.cpp"
+            "./vendor/efsw/src/efsw/platform/posix/SystemImpl.cpp"
           ],
           "cflags": ["-Wall", "-Wno-long-long"]
         }],

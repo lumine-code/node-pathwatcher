@@ -16,12 +16,14 @@ class FileWatcherGeneric : public FileWatcherImpl {
 
 	FileWatcherGeneric( FileWatcher* parent );
 
+	FileWatcherGeneric( FileWatcher* parent, unsigned int pollingFreq );
+
 	virtual ~FileWatcherGeneric();
 
 	/// Add a directory watch
 	/// On error returns WatchID with Error type.
 	WatchID addWatch( const std::string& directory, FileWatchListener* watcher, bool recursive,
-					  const std::vector<WatcherOption> &options ) override;
+					  const std::vector<WatcherOption>& options ) override;
 
 	/// Remove a directory watch. This is a brute force lazy search O(nlogn).
 	void removeWatch( const std::string& directory ) override;
@@ -34,7 +36,7 @@ class FileWatcherGeneric : public FileWatcherImpl {
 
 	/// Handles the action
 	void handleAction( Watcher* watch, const std::string& filename, unsigned long action,
-					   std::string oldFilename = "" ) override;
+					   const std::string& oldFilename = "" ) override;
 
 	/// @return Returns a list of the directories that are being watched
 	std::vector<std::string> directories() override;
@@ -49,6 +51,8 @@ class FileWatcherGeneric : public FileWatcherImpl {
 	WatchList mWatches;
 
 	Mutex mWatchesLock;
+
+	int mPollingFreq{ 1000 };
 
 	bool pathInWatches( const std::string& path ) override;
 

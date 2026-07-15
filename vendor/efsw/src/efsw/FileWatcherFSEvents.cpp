@@ -67,7 +67,7 @@ static std::string convertCFStringToStdString( CFStringRef cfString ) {
 	}
 }
 
-void FileWatcherFSEvents::FSEventCallback( ConstFSEventStreamRef streamRef, void* userData,
+void FileWatcherFSEvents::FSEventCallback( ConstFSEventStreamRef /*streamRef*/, void* userData,
 										   size_t numEvents, void* eventPaths,
 										   const FSEventStreamEventFlags eventFlags[],
 										   const FSEventStreamEventId eventIds[] ) {
@@ -126,8 +126,8 @@ FileWatcherFSEvents::~FileWatcherFSEvents() {
 }
 
 WatchID FileWatcherFSEvents::addWatch( const std::string& directory, FileWatchListener* watcher,
-									   bool recursive, const std::vector<WatcherOption> &options ) {
-	std::string dir( directory );
+									   bool recursive, const std::vector<WatcherOption>& options ) {
+	std::string dir( FileSystem::getRealPath( directory ) );
 
 	FileInfo fi( dir );
 
@@ -167,6 +167,9 @@ WatchID FileWatcherFSEvents::addWatch( const std::string& directory, FileWatchLi
 	pWatch->Directory = dir;
 	pWatch->Recursive = recursive;
 	pWatch->FWatcher = this;
+	pWatch->ModifiedFlags =
+		getOptionValue( options, Option::MacModifiedFilter, efswFSEventsModified );
+	pWatch->SanitizeEvents = getOptionValue( options, Option::MacSanitizeEvents, 0 ) != 0;
 
 	pWatch->init();
 
@@ -180,12 +183,15 @@ WatchID FileWatcherFSEvents::addWatch( const std::string& directory, FileWatchLi
 }
 
 void FileWatcherFSEvents::removeWatch( const std::string& directory ) {
+	std::string dir( FileSystem::getRealPath( directory ) );
+	FileSystem::dirAddSlashAtEnd( dir );
+
 	Lock lock( mWatchesLock );
 
 	WatchMap::iterator iter = mWatches.begin();
 
 	for ( ; iter != mWatches.end(); ++iter ) {
-		if ( directory == iter->second->Directory ) {
+		if ( dir == iter->second->Directory ) {
 			removeWatch( iter->second->ID );
 			return;
 		}
@@ -211,8 +217,9 @@ void FileWatcherFSEvents::removeWatch( WatchID watchid ) {
 
 void FileWatcherFSEvents::watch() {}
 
-void FileWatcherFSEvents::handleAction( Watcher* watch, const std::string& filename,
-										unsigned long action, std::string oldFilename ) {
+void FileWatcherFSEvents::handleAction( Watcher* /*watch*/, const std::string& /*filename*/,
+										unsigned long /*action*/,
+										const std::string& /*oldFilename*/ ) {
 	/// Not used
 }
 

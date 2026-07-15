@@ -15,7 +15,7 @@ class FileWatcherKqueue : public FileWatcherImpl {
 	friend class WatcherKqueue;
 
   public:
-	FileWatcherKqueue( FileWatcher* parent );
+	FileWatcherKqueue( FileWatcher* parent, unsigned int pollingFreq );
 
 	virtual ~FileWatcherKqueue();
 
@@ -35,7 +35,7 @@ class FileWatcherKqueue : public FileWatcherImpl {
 
 	/// Handles the action
 	void handleAction( Watcher* watch, const std::string& filename, unsigned long action,
-					   std::string oldFilename = "" ) override;
+					   const std::string& oldFilename = "" ) override;
 
 	/// @return Returns a list of the directories that are being watched
 	std::vector<std::string> directories() override;
@@ -59,6 +59,8 @@ class FileWatcherKqueue : public FileWatcherImpl {
 	long mFileDescriptorCount;
 
 	bool mAddingWatcher;
+
+	unsigned int mPollingFreq{ 500 };
 
 	bool isAddingWatcher() const;
 

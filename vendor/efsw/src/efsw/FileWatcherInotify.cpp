@@ -7,14 +7,10 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/inotify.h>
+#include <sys/select.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-#ifdef EFSW_INOTIFY_NOSYS
-#include <efsw/inotify-nosys.h>
-#else
-#include <sys/inotify.h>
-#endif
 
 #include <efsw/Debug.hpp>
 #include <efsw/FileSystem.hpp>
@@ -62,6 +58,11 @@ FileWatcherInotify::~FileWatcherInotify() {
 
 	mWatches.clear();
 
+	for ( auto w : mDeletedWatches ) {
+		efSAFE_DELETE( w );
+	}
+	mDeletedWatches.clear();
+
 	if ( mFD != -1 ) {
 		close( mFD );
 		mFD = -1;
@@ -69,15 +70,17 @@ FileWatcherInotify::~FileWatcherInotify() {
 }
 
 WatchID FileWatcherInotify::addWatch( const std::string& directory, FileWatchListener* watcher,
-									  bool recursive, const std::vector<WatcherOption>& ) {
+									  bool recursive, const std::vector<WatcherOption>& options ) {
 	if ( !mInitOK )
 		return Errors::Log::createLastError( Errors::Unspecified, directory );
 	Lock initLock( mInitLock );
-	return addWatch( directory, watcher, recursive, NULL );
+	bool syntheticEvents = getOptionValue( options, Options::LinuxProduceSyntheticEvents, 0 ) != 0;
+	return addWatch( directory, watcher, recursive, syntheticEvents, NULL );
 }
 
 WatchID FileWatcherInotify::addWatch( const std::string& directory, FileWatchListener* watcher,
-									  bool recursive, WatcherInotify* parent ) {
+									  bool recursive, bool syntheticEvents, WatcherInotify* parent,
+									  bool fromInternalEvent ) {
 	std::string dir( directory );
 
 	FileSystem::dirAddSlashAtEnd( dir );
@@ -128,6 +131,16 @@ WatchID FileWatcherInotify::addWatch( const std::string& directory, FileWatchLis
 		}
 	}
 
+	// The watch could exists if a file was moved between directories that are being watched
+	// In that case we need to remove the local watch information but *keep* the inotify watch id
+	// open, to be reused with the new watch.
+	{
+		Lock lock( mWatchesLock );
+		auto watchIdExists = mWatches.find( wd );
+		if ( watchIdExists != mWatches.end() )
+			removeWatchLocked( wd, true );
+	}
+
 	efDEBUG( "Added watch %s with id: %d\n", dir.c_str(), wd );
 
 	WatcherInotify* pWatch = new WatcherInotify();
@@ -137,10 +150,11 @@ WatchID FileWatcherInotify::addWatch( const std::string& directory, FileWatchLis
 	pWatch->Directory = dir;
 	pWatch->Recursive = recursive;
 	pWatch->Parent = parent;
+	pWatch->syntheticEvents = syntheticEvents;
 
 	{
 		Lock lock( mWatchesLock );
-		mWatches.insert( std::make_pair( wd, pWatch ) );
+		mWatches[wd] = pWatch;
 		mWatchesRef[pWatch->Directory] = wd;
 	}
 
@@ -151,6 +165,18 @@ WatchID FileWatcherInotify::addWatch( const std::string& directory, FileWatchLis
 
 	if ( pWatch->Recursive ) {
 		std::map<std::string, FileInfo> files = FileSystem::filesInfoFromPath( pWatch->Directory );
+
+		if ( fromInternalEvent && parent != NULL && syntheticEvents ) {
+			for ( const auto& file : files ) {
+				if ( file.second.isRegularFile() || file.second.isDirectory() ||
+					 file.second.isLink() ) {
+					pWatch->Listener->handleFileAction(
+						pWatch->ID, pWatch->Directory,
+						FileSystem::fileNameFromPath( file.second.Filepath ), Actions::Add );
+				}
+			}
+		}
+
 		std::map<std::string, FileInfo>::iterator it = files.begin();
 
 		for ( ; it != files.end(); ++it ) {
@@ -160,7 +186,8 @@ WatchID FileWatcherInotify::addWatch( const std::string& directory, FileWatchLis
 			const FileInfo& cfi = it->second;
 
 			if ( cfi.isDirectory() && cfi.isReadable() ) {
-				addWatch( cfi.Filepath, watcher, recursive, pWatch );
+				addWatch( cfi.Filepath, watcher, recursive, syntheticEvents, pWatch,
+						  fromInternalEvent );
 			}
 		}
 	}
@@ -168,7 +195,7 @@ WatchID FileWatcherInotify::addWatch( const std::string& directory, FileWatchLis
 	return wd;
 }
 
-void FileWatcherInotify::removeWatchLocked( WatchID watchid ) {
+void FileWatcherInotify::removeWatchLocked( WatchID watchid, bool skipInotifyRemove ) {
 	WatchMap::iterator iter = mWatches.find( watchid );
 	if ( iter == mWatches.end() )
 		return;
@@ -209,15 +236,17 @@ void FileWatcherInotify::removeWatchLocked( WatchID watchid ) {
 		}
 	}
 
-	int err = inotify_rm_watch( mFD, watchid );
+	if ( !skipInotifyRemove ) {
+		int err = inotify_rm_watch( mFD, watchid );
 
-	if ( err < 0 ) {
-		efDEBUG( "Error removing watch %d: %s\n", watchid, strerror( errno ) );
-	} else {
-		efDEBUG( "Removed watch %s with id: %d\n", watch->Directory.c_str(), watchid );
+		if ( err < 0 ) {
+			efDEBUG( "Error removing watch %d: %s\n", watchid, strerror( errno ) );
+		} else {
+			efDEBUG( "Removed watch %s with id: %d\n", watch->Directory.c_str(), watchid );
+		}
 	}
 
-	efSAFE_DELETE( watch );
+	mDeletedWatches.push_back( watch );
 }
 
 void FileWatcherInotify::removeWatch( const std::string& directory ) {
@@ -227,7 +256,10 @@ void FileWatcherInotify::removeWatch( const std::string& directory ) {
 	Lock lock( mWatchesLock );
 	Lock l( mRealWatchesLock );
 
-	std::unordered_map<std::string, WatchID>::iterator ref = mWatchesRef.find( directory );
+	std::string dir( directory );
+	FileSystem::dirAddSlashAtEnd( dir );
+
+	std::unordered_map<std::string, WatchID>::iterator ref = mWatchesRef.find( dir );
 	if ( ref == mWatchesRef.end() )
 		return;
 
@@ -244,7 +276,7 @@ void FileWatcherInotify::removeWatch( WatchID watchid ) {
 
 void FileWatcherInotify::watch() {
 	if ( NULL == mThread ) {
-		mThread = new Thread( &FileWatcherInotify::run, this );
+		mThread = new Thread( [this] { run(); } );
 		mThread->launch();
 	}
 }
@@ -267,10 +299,10 @@ Watcher* FileWatcherInotify::watcherContainsDirectory( std::string dir ) {
 void FileWatcherInotify::run() {
 	char* buff = new char[BUFF_SIZE];
 	memset( buff, 0, BUFF_SIZE );
-	WatchMap::iterator wit;
 
+	WatcherInotify* curWatcher = NULL;
 	WatcherInotify* currentMoveFrom = NULL;
-	u_int32_t currentMoveCookie = -1;
+	uint32_t currentMoveCookie = -1;
 	bool lastWasMovedFrom = false;
 	std::string prevOldFileName;
 
@@ -294,36 +326,74 @@ void FileWatcherInotify::run() {
 					struct inotify_event* pevent = (struct inotify_event*)&buff[i];
 
 					{
+						curWatcher = NULL;
+
 						{
 							Lock lock( mWatchesLock );
 
-							wit = mWatches.find( pevent->wd );
+							auto wit = mWatches.find( pevent->wd );
+
+							if ( wit != mWatches.end() )
+								curWatcher = wit->second;
 						}
 
-						if ( wit != mWatches.end() ) {
-							handleAction( wit->second, (char*)pevent->name, pevent->mask );
+						if ( curWatcher ) {
+							handleAction( curWatcher, (char*)pevent->name, pevent->mask );
 
-							if ( ( pevent->mask & IN_MOVED_TO ) && wit->second == currentMoveFrom &&
+							// Check if this is the destination of a move
+							if ( ( pevent->mask & IN_MOVED_TO ) && currentMoveFrom &&
 								 pevent->cookie == currentMoveCookie ) {
-								/// make pair success
+
+								// If the move happened between TWO DIFFERENT watched directories
+								if ( curWatcher != currentMoveFrom ) {
+									// We need to simulate a delete event, the IN_MOVED_TO will
+									// generate an add event after
+									handleAction( currentMoveFrom, currentMoveFrom->OldFileName,
+												  IN_DELETE );
+
+									// Clear the state on the source watcher so it doesn't
+									// get processed again or stuck with stale data.
+									currentMoveFrom->OldFileName = "";
+								}
+								// Else: If curWatcher == currentMoveFrom, it's a local rename.
+								// handleAction() above already detected the OldFileName and
+								// emitted a 'Moved' event correctly.
+
+								/// Pair processed successfully
 								currentMoveFrom = NULL;
 								currentMoveCookie = -1;
 							} else if ( pevent->mask & IN_MOVED_FROM ) {
 								// Previous event was moved from and current event is moved from
-								// Treat it as a DELETE or moved ouside watches
+								// Treat it as a DELETE or moved outside watches
 								if ( lastWasMovedFrom && currentMoveFrom ) {
 									mMovedOutsideWatches.push_back(
 										std::make_pair( currentMoveFrom, prevOldFileName ) );
 								}
 
-								currentMoveFrom = wit->second;
+								currentMoveFrom = curWatcher;
 								currentMoveCookie = pevent->cookie;
 							} else {
 								/// Keep track of the IN_MOVED_FROM events to know
 								/// if the IN_MOVED_TO event is also fired
 								if ( currentMoveFrom ) {
-									mMovedOutsideWatches.push_back(
-										std::make_pair( currentMoveFrom, prevOldFileName ) );
+									if ( std::find_if( mMovedOutsideWatches.begin(),
+													   mMovedOutsideWatches.end(),
+													   [currentMoveFrom](
+														   const std::pair<WatcherInotify*,
+																		   std::string>& moved ) {
+														   return moved.first == currentMoveFrom;
+													   } ) == mMovedOutsideWatches.end() ) {
+										mMovedOutsideWatches.push_back(
+											std::make_pair( currentMoveFrom, prevOldFileName ) );
+									} else {
+										efDEBUG( "Info: Tried to add watch to the moved outside "
+												 "watches but it was already there, Watch ID: %d - "
+												 "Address: %p - Path: \"%s\" - prevOldFileName: "
+												 "\"%s\"\n",
+												 pevent->wd, currentMoveFrom,
+												 currentMoveFrom->Directory.c_str(),
+												 prevOldFileName.c_str() );
+									}
 								}
 
 								currentMoveFrom = NULL;
@@ -339,12 +409,33 @@ void FileWatcherInotify::run() {
 					i += sizeof( struct inotify_event ) + pevent->len;
 				}
 			}
+
+			// If the last event was also IN_MODEV_FROM we didn't generate any event for that one
+			// Treat it as a DELETE or moved outside watches
+			if ( lastWasMovedFrom && currentMoveFrom ) {
+				mMovedOutsideWatches.push_back(
+					std::make_pair( currentMoveFrom, prevOldFileName ) );
+				currentMoveFrom = NULL;
+				lastWasMovedFrom = false;
+				prevOldFileName.clear();
+			}
 		} else {
 			// Here means no event received
 			// If last event is IN_MOVED_FROM, we assume no IN_MOVED_TO
 			if ( currentMoveFrom ) {
-				mMovedOutsideWatches.push_back(
-					std::make_pair( currentMoveFrom, currentMoveFrom->OldFileName ) );
+				if ( std::find_if(
+						 mMovedOutsideWatches.begin(), mMovedOutsideWatches.end(),
+						 [currentMoveFrom]( const std::pair<WatcherInotify*, std::string>& moved ) {
+							 return moved.first == currentMoveFrom;
+						 } ) == mMovedOutsideWatches.end() &&
+					 !currentMoveFrom->OldFileName.empty() ) {
+					mMovedOutsideWatches.push_back(
+						std::make_pair( currentMoveFrom, currentMoveFrom->OldFileName ) );
+				} else {
+					efDEBUG( "Warning: Tried to add watch to the moved outside "
+							 "watches but it was already there, Watch Address: %p\n",
+							 currentMoveFrom );
+				}
 			}
 
 			currentMoveFrom = NULL;
@@ -378,8 +469,14 @@ void FileWatcherInotify::run() {
 						continue;
 				}
 
-				Watcher* watch = ( *it ).first;
-				const std::string& oldFileName = ( *it ).second;
+				Watcher* watch = it->first;
+
+				// Clear the stale OldFileName.
+				// Since this move is considered complete (moved outside),
+				// the watcher should not be waiting for a pair anymore.
+				watch->OldFileName = "";
+
+				const std::string& oldFileName = it->second;
 
 				/// Check if the file move was a folder already being watched
 				std::vector<Watcher*> eraseWatches;
@@ -387,8 +484,8 @@ void FileWatcherInotify::run() {
 				{
 					Lock lock( mWatchesLock );
 
-					for ( ; wit != mWatches.end(); ++wit ) {
-						Watcher* oldWatch = wit->second;
+					for ( auto wit : mWatches ) {
+						Watcher* oldWatch = wit.second;
 
 						if ( oldWatch != watch &&
 							 -1 != String::strStartsWith( watch->Directory + oldFileName + "/",
@@ -423,6 +520,16 @@ void FileWatcherInotify::run() {
 
 			mMovedOutsideWatches.clear();
 		}
+
+		{
+			Lock lock( mWatchesLock );
+			if ( !mDeletedWatches.empty() ) {
+				for ( auto w : mDeletedWatches ) {
+					efSAFE_DELETE( w );
+				}
+				mDeletedWatches.clear();
+			}
+		}
 	} while ( mInitOK );
 
 	delete[] buff;
@@ -448,14 +555,15 @@ void FileWatcherInotify::checkForNewWatcher( Watcher* watch, std::string fpath )
 		}
 
 		if ( !found ) {
-			addWatch( fpath, watch->Listener, watch->Recursive,
-					  static_cast<WatcherInotify*>( watch ) );
+			WatcherInotify* iWatch = static_cast<WatcherInotify*>( watch );
+			addWatch( fpath, watch->Listener, watch->Recursive, iWatch->syntheticEvents,
+					  static_cast<WatcherInotify*>( watch ), true );
 		}
 	}
 }
 
 void FileWatcherInotify::handleAction( Watcher* watch, const std::string& filename,
-									   unsigned long action, std::string ) {
+									   unsigned long action, const std::string& ) {
 	if ( !watch || !watch->Listener || !mInitOK ) {
 		return;
 	}
@@ -464,7 +572,9 @@ void FileWatcherInotify::handleAction( Watcher* watch, const std::string& filena
 
 	std::string fpath( watch->Directory + filename );
 
-	if ( ( IN_CLOSE_WRITE & action ) || ( IN_MODIFY & action ) ) {
+	if ( IN_Q_OVERFLOW & action ) {
+		watch->Listener->handleMissedFileActions( watch->ID, watch->Directory );
+	} else if ( ( IN_CLOSE_WRITE & action ) || ( IN_MODIFY & action ) ) {
 		watch->Listener->handleFileAction( watch->ID, watch->Directory, filename,
 										   Actions::Modified );
 	} else if ( IN_MOVED_TO & action ) {
@@ -483,7 +593,7 @@ void FileWatcherInotify::handleAction( Watcher* watch, const std::string& filena
 											   Actions::Moved, watch->OldFileName );
 		}
 
-		if ( watch->Recursive && FileSystem::isDirectory( fpath ) ) {
+		if ( watch->Recursive && FileSystem::isDirectory( fpath ) && !watch->OldFileName.empty() ) {
 			/// Update the new directory path
 			std::string opath( watch->Directory + watch->OldFileName );
 			FileSystem::dirAddSlashAtEnd( opath );

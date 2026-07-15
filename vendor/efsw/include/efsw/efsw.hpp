@@ -1,7 +1,7 @@
 /**
 	@author Martín Lucas Golini
 
-	Copyright (c) 2013 Martín Lucas Golini
+	Copyright (c) 2026 Martín Lucas Golini
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,6 @@
 #ifndef ESFW_HPP
 #define ESFW_HPP
 
-#include <vector>
 #include <string>
 #include <vector>
 
@@ -135,7 +134,32 @@ enum Option {
 	/// For Windows, per default all events are captured but we might only be interested
 	/// in a subset; the value of the option should be set to a bitwise or'ed set of
 	/// FILE_NOTIFY_CHANGE_* flags.
-	WinNotifyFilter = 2
+	WinNotifyFilter = 2,
+	/// For Windows, prevents the watched directory from being deleted while being monitored.
+	/// When set to 1, FILE_SHARE_DELETE is NOT used, preventing directory deletion.
+	/// When set to 0 (default), FILE_SHARE_DELETE is used, allowing directory deletion
+	/// (original behavior).
+	WinPreventDirectoryDeletion = 3,
+	/// For macOS (FSEvents backend), per default all modified event types are capture but we might
+	/// only be interested in a subset; the value of the option should be set to a set of bitwise
+	/// from:
+	/// kFSEventStreamEventFlagItemFinderInfoMod
+	/// kFSEventStreamEventFlagItemModified
+	/// kFSEventStreamEventFlagItemInodeMetaMod
+	/// Default configuration will set the 3 flags
+	MacModifiedFilter = 3,
+	/// macOS sometimes informs incorrect or old file states that may confuse the consumer
+	/// The events sanitizer will try to sanitize incorrectly reported events in favor of reducing
+	/// the number of events reported. This will have an small performance and memory impact as a
+	/// consequence.
+	MacSanitizeEvents = 4,
+	/// Linux does not support natively recursive watchers. This means that when using recursive
+	/// watches efsw registers new watchers for each directory. If new file are created between
+	/// the time efsw takes to register the new directory those events might be missed. To avoid
+	/// missing new file notifications efsw will trigger synthetic created file events for existing
+	/// files in the new directory watched. This might have the unintended consequence of sending
+	/// duplicated created events due to the system also emitting this event.
+	LinuxProduceSyntheticEvents = 5,
 };
 }
 typedef Options::Option Option;
@@ -150,6 +174,14 @@ class EFSW_API FileWatcher {
 
 	/// Constructor that lets you force the use of the Generic File Watcher
 	explicit FileWatcher( bool useGenericFileWatcher );
+
+	/// Constructor that lets you force the use of the Generic File Watcher
+	/// @param useGenericFileWatcher True to enable the usage of generic file watcher (polling file
+	/// watcher)
+	/// @param pollingFrequencyMs Sets the polling frequency of the generic file
+	/// watcher or kqueue (default polling frequency is 1000 ms / 1 second for generic file watcher
+	/// and 500 ms for kqueue)
+	explicit FileWatcher( bool useGenericFileWatcher, unsigned int pollingFrequencyMs );
 
 	virtual ~FileWatcher();
 
@@ -168,8 +200,8 @@ class EFSW_API FileWatcher {
 	/// @param recursive Set this to true to include subdirectories
 	/// @param options Allows customization of a watcher
 	/// @return Returns the watch id for the directory or, on error, a WatchID with Error type.
-	WatchID addWatch( const std::string& directory, FileWatchListener* watcher, bool recursive, 
-					  const std::vector<WatcherOption> &options );
+	WatchID addWatch( const std::string& directory, FileWatchListener* watcher, bool recursive,
+					  const std::vector<WatcherOption>& options );
 
 	/// Remove a directory watch. This is a brute force search O(nlogn).
 	void removeWatch( const std::string& directory );
@@ -225,14 +257,19 @@ class FileWatchListener {
 	/// @param oldFilename The name of the file or directory moved
 	virtual void handleFileAction( WatchID watchid, const std::string& dir,
 								   const std::string& filename, Action action,
-								   std::string oldFilename = "" ) = 0;
+								   const std::string& oldFilename = "" ) = 0;
+
+	/// Handles that have missed file actions
+	/// @param watchid The watch id for the directory
+	/// @param dir The directory
+	virtual void handleMissedFileActions( WatchID /*watchid*/, const std::string& /*dir*/ ) {}
 };
 
 /// Optional, typically platform specific parameter for customization of a watcher.
 /// @class WatcherOption
 class WatcherOption {
   public:
-	WatcherOption(Option option, int value) : mOption(option), mValue(value) {};
+	WatcherOption( Option option, int value ) : mOption( option ), mValue( value ) {};
 	Option mOption;
 	int mValue;
 };

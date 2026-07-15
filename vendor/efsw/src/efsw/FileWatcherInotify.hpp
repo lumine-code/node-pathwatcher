@@ -6,7 +6,6 @@
 #if EFSW_PLATFORM == EFSW_PLATFORM_INOTIFY
 
 #include <efsw/WatcherInotify.hpp>
-#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -17,7 +16,7 @@ namespace efsw {
 class FileWatcherInotify : public FileWatcherImpl {
   public:
 	/// type for a map from WatchID to WatchStruct pointer
-	typedef std::map<WatchID, WatcherInotify*> WatchMap;
+	typedef std::unordered_map<WatchID, WatcherInotify*> WatchMap;
 
 	FileWatcherInotify( FileWatcher* parent );
 
@@ -39,7 +38,7 @@ class FileWatcherInotify : public FileWatcherImpl {
 
 	/// Handles the action
 	void handleAction( Watcher* watch, const std::string& filename, unsigned long action,
-					   std::string oldFilename = "" ) override;
+					   const std::string& oldFilename = "" ) override;
 
 	/// @return Returns a list of the directories that are being watched
 	std::vector<std::string> directories() override;
@@ -63,16 +62,18 @@ class FileWatcherInotify : public FileWatcherImpl {
 	Mutex mInitLock;
 	bool mIsTakingAction;
 	std::vector<std::pair<WatcherInotify*, std::string>> mMovedOutsideWatches;
+	std::vector<WatcherInotify*> mDeletedWatches;
 
 	WatchID addWatch( const std::string& directory, FileWatchListener* watcher, bool recursive,
-					  WatcherInotify* parent = NULL );
+					  bool syntheticEvents, WatcherInotify* parent = NULL,
+					  bool fromInternalEvent = false );
 
 	bool pathInWatches( const std::string& path ) override;
 
   private:
 	void run();
 
-	void removeWatchLocked( WatchID watchid );
+	void removeWatchLocked( WatchID watchid, bool skipInotifyRemove = false );
 
 	void checkForNewWatcher( Watcher* watch, std::string fpath );
 
