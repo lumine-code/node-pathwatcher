@@ -485,6 +485,27 @@ class File {
         return;
       case 'change':
       case 'resurrect':
+        // A single write can surface as several native change events — most
+        // notably efsw delivers duplicate "modified" events on Linux and macOS
+        // (the Windows backend already collapses them internally). Coalesce on
+        // the file's mtime+size signature so `onDidChange` fires once per
+        // actual modification instead of once per OS event. `resurrect` always
+        // emits: the file just came back, so consumers must re-read it even if
+        // its signature matches the pre-deletion value.
+        if (eventType === 'change') {
+          let signature = null;
+          try {
+            const stats = FS.statSync(this.path);
+            signature = `${stats.mtimeMs}:${stats.size}`;
+          } catch (error) {
+            // The file may be momentarily gone; fall through and emit so the
+            // usual delete/resurrect handling can take over.
+          }
+          if (signature != null && signature === this.lastChangeSignature) return;
+          this.lastChangeSignature = signature;
+        } else {
+          this.lastChangeSignature = null;
+        }
         this.cachedContents = null;
         this.emitter.emit('did-change');
     }
