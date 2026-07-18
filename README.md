@@ -84,6 +84,19 @@ The public `File` and `Directory` APIs remain compatible with Lumine's `require(
 [File]: https://github.com/lumine-code/node-pathwatcher/blob/master/src/file.js
 [Directory]: https://github.com/lumine-code/node-pathwatcher/blob/master/src/directory.js
 
+## Changes
+
+This is the Lumine fork of `pathwatcher`, published under the `@lumine-code` scope. Relative to the upstream Pulsar package it:
+
+- Rebrands the package to `@lumine-code/pathwatcher` and releases it as a new major version.
+- Removes the `emissary` dependency and the legacy native headers.
+- Updates the vendored efsw watcher to 1.6.3.
+- Fixes a kernel write-after-free on Windows watcher teardown.
+- Coalesces duplicate native change events by mtime and size.
+- Modernizes dependencies onto the `@lumine-code` `fs-plus` and `underscore-plus` forks.
+- Adds cross-platform CI and modernizes the publish workflows.
+- Updates the license attribution for Lumine.
+
 ## Contributing
 
 Got ideas to make this package better, found a bug, or want to help add new features? Just drop your thoughts on GitHub. Any feedback is welcome!
