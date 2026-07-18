@@ -2,6 +2,9 @@
 
 Watches files and directories and provides Lumine-compatible file system abstractions.
 
+> [!WARNING]
+> **This package is deprecated.** [Lumine](https://github.com/lumine-code/lumine) no longer depends on it — file watching has moved to [`@parcel/watcher`](https://www.npmjs.com/package/@parcel/watcher), and the `File`/`Directory` classes have been reimplemented in Lumine core. This repository is archived and no longer maintained.
+
 ## Features
 
 - **Cross-platform watching**: observes file and directory changes on Windows, macOS, and Linux.
