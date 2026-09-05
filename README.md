@@ -20,7 +20,7 @@ Watches files and directories and provides Lumine-compatible file system abstrac
 
 ## Installation
 
-```bash
+```sh
 npm install @lumine-code/pathwatcher
 ```
 
