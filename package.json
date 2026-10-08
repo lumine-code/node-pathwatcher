@@ -2,7 +2,7 @@
   "name": "@lumine-code/pathwatcher",
   "author": "lumine-code",
   "description": "Watches files and directories and provides Lumine-compatible file system abstractions.",
-  "version": "10.0.0",
+  "version": "1.0.0",
   "main": "./src/main",
   "license": "MIT",
   "publishConfig": {
