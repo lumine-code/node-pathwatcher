@@ -26,10 +26,10 @@ npm install @lumine-code/pathwatcher
 
 ## Building
 
-* Clone the repository
-* `git submodule init && git submodule update`
-* Run `npm install` to install the dependencies
-* Run `npm test` to run the specs
+- Clone the repository
+- `git submodule init && git submodule update`
+- Run `npm install` to install the dependencies
+- Run `npm test` to run the specs
 
 ## Caveats
 
@@ -40,7 +40,7 @@ If you’re using it in an Electron renderer process, you must take extra care i
 ## Using
 
 ```js
-const PathWatcher = require('@lumine-code/pathwatcher');
+const PathWatcher = require("@lumine-code/pathwatcher");
 ```
 
 ### `watch(filename, listener)`
@@ -55,10 +55,10 @@ Returns an instance of `PathWatcher`. This instance is useful primarily for the 
 
 #### Caveats
 
-* Watching a specific file or directory will not notify you when that file or directory is created, since the file must already exist before you start watching the path.
-* When watching a file, `event` can be any of `rename`, `delete`, or `change`, where `change` means that the file’s contents changed somehow.
-* When watching a directory, `event` can only be `change`, and in this context `change` signifies that one or more of the directory’s children changed (by being renamed, deleted, added, or modified).
-* A watched directory will not report when it is renamed or deleted. If you want to detect when a given directory is deleted, watch its parent directory and test for the child directory’s existence when you receive a `change` event.
+- Watching a specific file or directory will not notify you when that file or directory is created, since the file must already exist before you start watching the path.
+- When watching a file, `event` can be any of `rename`, `delete`, or `change`, where `change` means that the file’s contents changed somehow.
+- When watching a directory, `event` can only be `change`, and in this context `change` signifies that one or more of the directory’s children changed (by being renamed, deleted, added, or modified).
+- A watched directory will not report when it is renamed or deleted. If you want to detect when a given directory is deleted, watch its parent directory and test for the child directory’s existence when you receive a `change` event.
 
 ### `PathWatcher::close()`
 
@@ -66,7 +66,7 @@ Stop watching for changes on the given `PathWatcher`.
 
 ### `closeAllWatchers()`
 
-Stop watching on all subscribed paths.  All existing `PathWatcher` instances will stop receiving events. Call this if you’re going to end the process; it ensures that your script will exit cleanly.
+Stop watching on all subscribed paths. All existing `PathWatcher` instances will stop receiving events. Call this if you’re going to end the process; it ensures that your script will exit cleanly.
 
 ### `getWatchedPaths()`
 
@@ -80,9 +80,8 @@ These are convenience wrappers around some filesystem operations. They also wrap
 
 The public `File` and `Directory` APIs remain compatible with Lumine's `require('atom')` exports.
 
-* [File][]
-* [Directory][]
-
+- [File][]
+- [Directory][]
 
 [File]: https://github.com/lumine-code/node-pathwatcher/blob/master/src/file.js
 [Directory]: https://github.com/lumine-code/node-pathwatcher/blob/master/src/directory.js
